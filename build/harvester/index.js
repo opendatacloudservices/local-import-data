@@ -3,11 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Harvester = void 0;
 const pg_1 = require("pg");
 class Harvester {
-    constructor(harvesterName) {
+    constructor(harvesterName, _globalClient) {
         this.harvesterName = '';
         if (!harvesterName) {
             throw new Error('harvesterName not set.');
         }
+        this.globalClient = _globalClient;
         this.harvesterName = harvesterName.toUpperCase();
         this.client = new pg_1.Client({
             user: process.env[`PG${this.harvesterName}USER`],
@@ -18,8 +19,8 @@ class Harvester {
         });
         this.client.connect();
     }
-    // import a dataset
-    import(instance, dataset) {
+    // import or update a dataset
+    upsert(instance, dataset) {
         console.log(instance, dataset);
         return Promise.resolve();
     }

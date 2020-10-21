@@ -2,7 +2,8 @@ import { Client } from 'pg';
 export declare class Harvester {
     client: Client;
     harvesterName: string;
-    constructor(harvesterName: string);
-    import(instance: number, dataset: number): Promise<void>;
+    globalClient: Client;
+    constructor(harvesterName: string, _globalClient: Client);
+    upsert(instance: number, dataset: number): Promise<void>;
     check(): Promise<boolean>;
 }

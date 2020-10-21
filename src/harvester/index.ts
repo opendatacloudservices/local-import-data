@@ -3,11 +3,14 @@ import {Client} from 'pg';
 export class Harvester {
   client: Client;
   harvesterName = '';
+  globalClient: Client;
 
-  constructor(harvesterName: string) {
+  constructor(harvesterName: string, _globalClient: Client) {
     if (!harvesterName) {
       throw new Error('harvesterName not set.');
     }
+
+    this.globalClient = _globalClient;
 
     this.harvesterName = harvesterName.toUpperCase();
 
@@ -22,8 +25,8 @@ export class Harvester {
     this.client.connect();
   }
 
-  // import a dataset
-  import(instance: number, dataset: number): Promise<void> {
+  // import or update a dataset
+  upsert(instance: number, dataset: number): Promise<void> {
     console.log(instance, dataset);
     return Promise.resolve();
   }
