@@ -9,7 +9,13 @@ import fetch from 'node-fetch';
 // get environmental variables
 dotenv.config({path: path.join(__dirname, '../.env')});
 
-import {api, catchAll, startTransaction, logError} from 'local-microservice';
+import {
+  api,
+  catchAll,
+  startTransaction,
+  logError,
+  port,
+} from 'local-microservice';
 
 // connect to postgres (via env vars params)
 const client = new Client({
@@ -138,7 +144,8 @@ api.get('/import/all', (req, res) => {
 
   const calls = [];
   for (const key in harvesters) {
-    calls.push(fetch(`http://localhost:${process.env.PORT}/import/${key}`));
+    // get port from pm2 config
+    calls.push(fetch(`http://localhost:${port}/import/${key}`));
   }
 
   Promise.all(calls)

@@ -130,7 +130,8 @@ local_microservice_1.api.get('/import/all', (req, res) => {
     const trans = local_microservice_1.startTransaction({ name: '/import/all', type: 'get' });
     const calls = [];
     for (const key in harvesters) {
-        calls.push(node_fetch_1.default(`http://localhost:${process.env.PORT}/import/${key}`));
+        // get port from pm2 config
+        calls.push(node_fetch_1.default(`http://localhost:${local_microservice_1.port}/import/${key}`));
     }
     Promise.all(calls)
         .then(() => {
