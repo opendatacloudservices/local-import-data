@@ -144,7 +144,6 @@ api.get('/import/all', (req, res) => {
 
   const calls = [];
   for (const key in harvesters) {
-    // get port from pm2 config
     calls.push(fetch(`http://localhost:${port}/import/${key}`));
   }
 
