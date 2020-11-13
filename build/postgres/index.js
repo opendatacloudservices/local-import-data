@@ -15,7 +15,7 @@ exports.tableExist = (client, tableName) => {
 };
 exports.initTables = (client) => {
     return client
-        .query(`CREATE TABLE datasets(
+        .query(`CREATE TABLE datasets (
       id serial NOT NULL,
       harvester text NOT NULL,
       harvester_instance_id integer,
@@ -27,8 +27,8 @@ exports.initTables = (client) => {
       harvester_dataset_id text,
       CONSTRAINT datasets_pkey PRIMARY KEY (id)  
     );`)
-        .then(() => client.query(`CREATE TABLE files(
-        id serial NOT NULL DEFAULT,
+        .then(() => client.query(`CREATE TABLE files (
+        id serial NOT NULL,
         dataset_id integer,
         meta_url text,
         file text,
@@ -64,7 +64,7 @@ exports.tablesExist = (client) => {
 exports.resetTables = (client) => {
     return exports.tablesExist(client)
         .then(exists => {
-        if (exists) {
+        if (!exists) {
             return Promise.reject('Looks like some of the tables you are trying to reset, do not exist.');
         }
         return client.query('TRUNCATE datasets, files, taxonomies;');

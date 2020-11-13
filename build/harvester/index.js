@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Harvester = void 0;
 const pg_1 = require("pg");
 const local_microservice_1 = require("local-microservice");
+const utilities_node_1 = require("utilities-node");
 class Harvester {
     constructor(harvesterName, _globalClient) {
         this.harvesterName = '';
@@ -82,7 +83,7 @@ class Harvester {
             });
             try {
                 await this.globalClient.query(`INSERT INTO taxonomies (dataset_id, type, value) VALUES ${datasetObj.tags
-                    .map((d, i) => `(${this.dollarList(i * 3, 3)})`)
+                    .map((d, i) => `(${utilities_node_1.dollarList(i * 3, 3)})`)
                     .join(',')}`, values);
             }
             catch (err) {
@@ -98,7 +99,7 @@ class Harvester {
             });
             try {
                 await this.globalClient.query(`INSERT INTO taxonomies (dataset_id, type, value) VALUES ${datasetObj.groups
-                    .map((d, i) => `(${this.dollarList(i * 3, 3)})`)
+                    .map((d, i) => `(${utilities_node_1.dollarList(i * 3, 3)})`)
                     .join(',')}`, values);
             }
             catch (err) {
@@ -122,7 +123,7 @@ class Harvester {
             });
             try {
                 await this.globalClient.query(`INSERT INTO files (dataset_id, meta_url, state, meta_name, meta_format, meta_size, meta_license) VALUES ${datasetObj.resources
-                    .map((d, i) => `(${this.dollarList(i * 7, 7)})`)
+                    .map((d, i) => `(${utilities_node_1.dollarList(i * 7, 7)})`)
                     .join(',')}`, values);
             }
             catch (err) {
@@ -132,14 +133,6 @@ class Harvester {
             }
         }
         return Promise.resolve();
-    }
-    // TODO: Move to utilities
-    dollarList(start, length) {
-        const r = [];
-        for (let i = start; i < start + length; i += 1) {
-            r.push(`$${i + 1}`);
-        }
-        return r.join(',');
     }
     async updateDataset(datasetObj, id) {
         // we don't care about changes, only current state

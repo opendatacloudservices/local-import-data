@@ -36,6 +36,7 @@
     "express-queue": "0.0.12",
     "local-microservice": "file:../local-microservice",
     "local-pm2-config": "file:../local-pm2-config",
+    "utilities-node": "file:../utilities-node",
     "node-fetch": "^2.6.1",
     "pg": "^8.3.2"
   }

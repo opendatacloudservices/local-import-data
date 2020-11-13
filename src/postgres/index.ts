@@ -20,7 +20,7 @@ export const tableExist = (
 export const initTables = (client: Client): Promise<void> => {
   return client
     .query(
-      `CREATE TABLE datasets(
+      `CREATE TABLE datasets (
       id serial NOT NULL,
       harvester text NOT NULL,
       harvester_instance_id integer,
@@ -34,8 +34,8 @@ export const initTables = (client: Client): Promise<void> => {
     );`
     )
     .then(() =>
-      client.query(`CREATE TABLE files(
-        id serial NOT NULL DEFAULT,
+      client.query(`CREATE TABLE files (
+        id serial NOT NULL,
         dataset_id integer,
         meta_url text,
         file text,
@@ -76,7 +76,7 @@ export const tablesExist = (client: Client): Promise<boolean> => {
 export const resetTables = (client: Client): Promise<void> => {
   return tablesExist(client)
     .then(exists => {
-      if (exists) {
+      if (!exists) {
         return Promise.reject(
           'Looks like some of the tables you are trying to reset, do not exist.'
         );

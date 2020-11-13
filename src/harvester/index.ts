@@ -1,5 +1,6 @@
 import {Client} from 'pg';
 import {logError} from 'local-microservice';
+import {dollarList} from 'utilities-node';
 
 export type DataSet = {
   harvester: string;
@@ -125,7 +126,7 @@ export class Harvester {
       try {
         await this.globalClient.query(
           `INSERT INTO taxonomies (dataset_id, type, value) VALUES ${datasetObj.tags
-            .map((d, i) => `(${this.dollarList(i * 3, 3)})`)
+            .map((d, i) => `(${dollarList(i * 3, 3)})`)
             .join(',')}`,
           values
         );
@@ -143,7 +144,7 @@ export class Harvester {
       try {
         await this.globalClient.query(
           `INSERT INTO taxonomies (dataset_id, type, value) VALUES ${datasetObj.groups
-            .map((d, i) => `(${this.dollarList(i * 3, 3)})`)
+            .map((d, i) => `(${dollarList(i * 3, 3)})`)
             .join(',')}`,
           values
         );
@@ -171,7 +172,7 @@ export class Harvester {
       try {
         await this.globalClient.query(
           `INSERT INTO files (dataset_id, meta_url, state, meta_name, meta_format, meta_size, meta_license) VALUES ${datasetObj.resources
-            .map((d, i) => `(${this.dollarList(i * 7, 7)})`)
+            .map((d, i) => `(${dollarList(i * 7, 7)})`)
             .join(',')}`,
           values
         );
@@ -182,17 +183,6 @@ export class Harvester {
       }
     }
     return Promise.resolve();
-  }
-
-  // TODO: Move to utilities
-  dollarList(start: number, length: number): string {
-    const r: string[] = [];
-
-    for (let i = start; i < start + length; i += 1) {
-      r.push(`$${i + 1}`);
-    }
-
-    return r.join(',');
   }
 
   async updateDataset(datasetObj: DataSet, id: number) {
