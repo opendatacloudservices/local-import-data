@@ -19,6 +19,10 @@ client.connect();
 // harvester setup
 const harvesters = {};
 harvesters.ckan = new ckan_1.Ckan(client);
+// TODO: tests
+// TODO: import all
+// TODO: create databases
+// TODO: clear databases
 /**
  * @swagger
  *
@@ -64,6 +68,7 @@ local_microservice_1.api.get('/import/:harvester', (req, res) => {
             .catch(err => {
             console.log(err);
             local_microservice_1.logError(err);
+            trans.end('error');
             res.status(500).json({ message: err });
         });
     }

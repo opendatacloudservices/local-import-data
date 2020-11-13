@@ -73,6 +73,7 @@ api.get('/import/:harvester', (req, res) => {
       .catch(err => {
         console.log(err);
         logError(err);
+        trans.end('error');
         res.status(500).json({message: err});
       });
   }
