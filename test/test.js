@@ -1,4 +1,10 @@
 const dotenv = require('dotenv');
+// get environmental variables
+dotenv.config();
+
+// easier class construction
+process.env['PGCKANDATABASE'] = process.env['PGCKANDATABASETEST'];
+
 const pg = require('pg');
 const {
   masterTableExist: ckanMasterTableExist,
@@ -15,9 +21,7 @@ const {
   dropTables,
 } = require('../build/postgres/index');
 
-
-// get environmental variables
-dotenv.config();
+const {Ckan} = require('../build/harvester/ckan');
 
 // connect to postgres (via env vars params)
 const client = new pg.Client({
@@ -97,15 +101,6 @@ test('masterTableReset', async () => {
     });
 });
 
-test('masterTableDrop', async () => {
-  await dropTables(client);
-  await client.query(`SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public';`)
-    .then((result) => {
-      expect(result).toHaveProperty('rows');
-      expect(parseInt(result.rows[0].count)).toEqual(0);
-    });
-});
-
 /*---------- HARVESTER TESTS ----------*/
 
 // CKAN is used to also test harvester class functions,
@@ -179,5 +174,78 @@ test('CKAN: check if test database is available', async () => {
   await ckanClient.query(`INSERT INTO govdata_ref_resources_packages (package_id, resource_id) VALUES (1, 1)`);
 });
 
+const ckan = new Ckan(client);
 
+test('CKAN: getPrefix', async () => {
+  await ckan.getPrefix(1)
+    .then((result) => {
+      expect(result).toBe('govdata');
+    });
+});
 
+test('CKAN: getDataset', async () => {
+  await ckan.getDataset(1, 1)
+    .then((result) => {
+      expect(result)
+      .toStrictEqual({
+        "dataset_id":1,
+        "instance_id":1,
+        "name":"title",
+        "license":"license_title",
+        "owner":["author","maintainer"],
+        "created":new Date('2019-12-31T23:00:00.000Z'),
+        "modified":new Date('2019-12-31T23:00:00.000Z'),
+        "tags":["title"],
+        "groups":["title"],
+        "resources":[
+          {"name":"name","format":"format","url":"url","license":"license","size":500}
+        ]
+      });
+    });
+});
+
+test('CKAN: insert/update process', async () => {
+  await ckan.getNext()
+    .then(async (result) => {
+      expect(result.length).toBe(1);
+
+      let datasetExists = await ckan.exists('ckan', 1, 1);
+      expect(datasetExists).toBe(null);
+
+      await ckan.insert(1, 1);
+      datasetExists = await ckan.exists('ckan', 1, 1);
+      expect(datasetExists).toBe(1);
+
+      await client.query('SELECT * FROM datasets WHERE id = 1')
+        .then((results) => {
+          expect(results).toHaveProperty('rows');
+          expect(results.rows[0].meta_name).toBe('title');
+        });
+
+      await ckanClient.query(`UPDATE govdata_packages SET title = 'new_title' WHERE id = '1'`);
+      
+      await ckan.update(1, 1, 1);
+      
+      await client.query('SELECT * FROM datasets WHERE id = 1')
+        .then((results) => {
+          expect(results).toHaveProperty('rows');
+          expect(results.rows[0].meta_name).toBe('new_title');
+        });
+      
+      await ckan.getNext()
+        .then((results) => {
+          expect(results.length).toBe(0);
+        });
+    });
+});
+
+/*---------- FINISH TESTS AND CLEAR MASTER TABLE ----------*/
+
+test('masterTableDrop', async () => {
+  await dropTables(client);
+  await client.query(`SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public';`)
+    .then((result) => {
+      expect(result).toHaveProperty('rows');
+      expect(parseInt(result.rows[0].count)).toEqual(0);
+    });
+});
