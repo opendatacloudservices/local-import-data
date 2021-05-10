@@ -20,7 +20,7 @@ export const tableExist = (
 export const initTables = (client: Client): Promise<void> => {
   return client
     .query(
-      `CREATE TABLE datasets (
+      `CREATE TABLE Datasets (
       id serial NOT NULL,
       harvester text NOT NULL,
       harvester_instance_id integer,
@@ -34,7 +34,7 @@ export const initTables = (client: Client): Promise<void> => {
     );`
     )
     .then(() =>
-      client.query(`CREATE TABLE files (
+      client.query(`CREATE TABLE Files (
         id serial NOT NULL,
         dataset_id integer,
         meta_url text,
@@ -49,7 +49,7 @@ export const initTables = (client: Client): Promise<void> => {
       );`)
     )
     .then(() =>
-      client.query(`CREATE TABLE taxonomies(
+      client.query(`CREATE TABLE Taxonomies(
         id serial NOT NULL,
         dataset_id integer,
         type text,
@@ -62,9 +62,9 @@ export const initTables = (client: Client): Promise<void> => {
 
 export const tablesExist = (client: Client): Promise<boolean> => {
   return Promise.all([
-    tableExist(client, 'datasets'),
-    tableExist(client, 'files'),
-    tableExist(client, 'taxonomies'),
+    tableExist(client, 'Datasets'),
+    tableExist(client, 'Files'),
+    tableExist(client, 'Taxonomies'),
   ]).then(exists => {
     if (exists.includes(false)) {
       return Promise.resolve(false);
@@ -81,7 +81,7 @@ export const resetTables = (client: Client): Promise<void> => {
           'Looks like some of the tables you are trying to reset, do not exist.'
         );
       }
-      return client.query('TRUNCATE datasets, files, taxonomies;');
+      return client.query('TRUNCATE Files, Taxonomies, Datasets;');
     })
     .then(() => {
       return Promise.resolve();
@@ -97,7 +97,7 @@ export const dropTables = (client: Client): Promise<void> => {
         );
       }
       return Promise.all(
-        ['datasets', 'files', 'taxonomies'].map((name: string) => {
+        ['Files', 'Taxonomies', 'Datasets'].map((name: string) => {
           return client.query(`DROP TABLE ${name}`);
         })
       );

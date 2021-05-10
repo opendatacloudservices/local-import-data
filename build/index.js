@@ -126,25 +126,22 @@ local_microservice_1.api.get('/master/drop', (req, res) => {
  *       200:
  *         description: success
  */
-local_microservice_1.api.get('/import/all', (req, res) => {
+local_microservice_1.api.get('/import/all', async (req, res) => {
     const trans = local_microservice_1.startTransaction({ name: '/import/all', type: 'get' });
-    const calls = [];
-    for (const key in harvesters) {
-        // get port from pm2 config
-        calls.push(node_fetch_1.default(`http://localhost:${local_microservice_1.port}/import/${key}`));
-    }
-    Promise.all(calls)
-        .then(() => {
+    try {
+        for (const key in harvesters) {
+            await node_fetch_1.default(`http://localhost:${local_microservice_1.port}/import/${key}`);
+        }
         res.status(200).json({
             message: 'Import of all harvesters finished',
         });
         trans.end('success');
-    })
-        .catch(err => {
+    }
+    catch (err) {
         local_microservice_1.logError(err);
         trans.end('error');
         res.status(500).json({ message: err });
-    });
+    }
 });
 /**
  * @swagger

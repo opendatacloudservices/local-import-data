@@ -139,26 +139,22 @@ api.get('/master/drop', (req, res) => {
  *       200:
  *         description: success
  */
-api.get('/import/all', (req, res) => {
+api.get('/import/all', async (req, res) => {
   const trans = startTransaction({name: '/import/all', type: 'get'});
 
-  const calls = [];
-  for (const key in harvesters) {
-    calls.push(fetch(`http://localhost:${port}/import/${key}`));
-  }
-
-  Promise.all(calls)
-    .then(() => {
-      res.status(200).json({
-        message: 'Import of all harvesters finished',
-      });
-      trans.end('success');
-    })
-    .catch(err => {
-      logError(err);
-      trans.end('error');
-      res.status(500).json({message: err});
+  try {
+    for (const key in harvesters) {
+      await fetch(`http://localhost:${port}/import/${key}`);
+    }
+    res.status(200).json({
+      message: 'Import of all harvesters finished',
     });
+    trans.end('success');
+  } catch (err) {
+    logError(err);
+    trans.end('error');
+    res.status(500).json({message: err});
+  }
 });
 
 /**

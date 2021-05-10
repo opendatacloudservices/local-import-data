@@ -80,7 +80,7 @@ export class Harvester {
   ): Promise<number | null> {
     return this.globalClient
       .query(
-        'SELECT id FROM datasets WHERE harvester = $1 AND harvester_instance_id = $2 AND harvester_dataset_id = $3',
+        'SELECT id FROM Datasets WHERE harvester = $1 AND harvester_instance_id = $2 AND harvester_dataset_id = $3',
         [harvester, harvester_instance_id, harvester_dataset_id]
       )
       .then(result => {
@@ -96,7 +96,7 @@ export class Harvester {
   insertDataset(datasetObj: DataSet): Promise<number> {
     return this.globalClient
       .query(
-        'INSERT INTO datasets (harvester, harvester_instance_id, harvester_dataset_id, meta_name, meta_license, meta_owner, meta_created, meta_modified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+        'INSERT INTO Datasets (harvester, harvester_instance_id, harvester_dataset_id, meta_name, meta_license, meta_owner, meta_created, meta_modified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
         [
           datasetObj.harvester,
           datasetObj.harvester_instance_id,
@@ -125,7 +125,7 @@ export class Harvester {
       });
       try {
         await this.globalClient.query(
-          `INSERT INTO taxonomies (dataset_id, type, value) VALUES ${datasetObj.tags
+          `INSERT INTO Taxonomies (dataset_id, type, value) VALUES ${datasetObj.tags
             .map((d, i) => `(${dollarList(i * 3, 3)})`)
             .join(',')}`,
           values
@@ -143,7 +143,7 @@ export class Harvester {
       });
       try {
         await this.globalClient.query(
-          `INSERT INTO taxonomies (dataset_id, type, value) VALUES ${datasetObj.groups
+          `INSERT INTO Taxonomies (dataset_id, type, value) VALUES ${datasetObj.groups
             .map((d, i) => `(${dollarList(i * 3, 3)})`)
             .join(',')}`,
           values
@@ -171,7 +171,7 @@ export class Harvester {
       });
       try {
         await this.globalClient.query(
-          `INSERT INTO files (dataset_id, meta_url, state, meta_name, meta_format, meta_size, meta_license) VALUES ${datasetObj.resources
+          `INSERT INTO Files (dataset_id, meta_url, state, meta_name, meta_format, meta_size, meta_license) VALUES ${datasetObj.resources
             .map((d, i) => `(${dollarList(i * 7, 7)})`)
             .join(',')}`,
           values
@@ -189,7 +189,7 @@ export class Harvester {
     // we don't care about changes, only current state
     try {
       await this.globalClient.query(
-        'UPDATE datasets SET meta_name = $1, meta_license = $2, meta_owner = $3, meta_created = $4, meta_modified = $5 WHERE id = $6',
+        'UPDATE Datasets SET meta_name = $1, meta_license = $2, meta_owner = $3, meta_created = $4, meta_modified = $5 WHERE id = $6',
         [
           datasetObj.name,
           datasetObj.license,
@@ -200,10 +200,10 @@ export class Harvester {
         ]
       );
       await this.globalClient.query(
-        'DELETE FROM taxonomies WHERE dataset_id = $1',
+        'DELETE FROM Taxonomies WHERE dataset_id = $1',
         [id]
       );
-      await this.globalClient.query('DELETE FROM files WHERE dataset_id = $1', [
+      await this.globalClient.query('DELETE FROM Files WHERE dataset_id = $1', [
         id,
       ]);
     } catch (err) {

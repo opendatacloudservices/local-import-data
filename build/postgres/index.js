@@ -15,7 +15,7 @@ exports.tableExist = (client, tableName) => {
 };
 exports.initTables = (client) => {
     return client
-        .query(`CREATE TABLE datasets (
+        .query(`CREATE TABLE Datasets (
       id serial NOT NULL,
       harvester text NOT NULL,
       harvester_instance_id integer,
@@ -27,7 +27,7 @@ exports.initTables = (client) => {
       harvester_dataset_id text,
       CONSTRAINT datasets_pkey PRIMARY KEY (id)  
     );`)
-        .then(() => client.query(`CREATE TABLE files (
+        .then(() => client.query(`CREATE TABLE Files (
         id serial NOT NULL,
         dataset_id integer,
         meta_url text,
@@ -40,7 +40,7 @@ exports.initTables = (client) => {
         meta_license text,
         CONSTRAINT files_pkey PRIMARY KEY (id)
       );`))
-        .then(() => client.query(`CREATE TABLE taxonomies(
+        .then(() => client.query(`CREATE TABLE Taxonomies(
         id serial NOT NULL,
         dataset_id integer,
         type text,
@@ -51,9 +51,9 @@ exports.initTables = (client) => {
 };
 exports.tablesExist = (client) => {
     return Promise.all([
-        exports.tableExist(client, 'datasets'),
-        exports.tableExist(client, 'files'),
-        exports.tableExist(client, 'taxonomies'),
+        exports.tableExist(client, 'Datasets'),
+        exports.tableExist(client, 'Files'),
+        exports.tableExist(client, 'Taxonomies'),
     ]).then(exists => {
         if (exists.includes(false)) {
             return Promise.resolve(false);
@@ -67,7 +67,7 @@ exports.resetTables = (client) => {
         if (!exists) {
             return Promise.reject('Looks like some of the tables you are trying to reset, do not exist.');
         }
-        return client.query('TRUNCATE datasets, files, taxonomies;');
+        return client.query('TRUNCATE Files, Taxonomies, Datasets;');
     })
         .then(() => {
         return Promise.resolve();
@@ -79,7 +79,7 @@ exports.dropTables = (client) => {
         if (!exists) {
             return Promise.reject('Looks like the tables you are trying to drop, do not all exist.');
         }
-        return Promise.all(['datasets', 'files', 'taxonomies'].map((name) => {
+        return Promise.all(['Files', 'Taxonomies', 'Datasets'].map((name) => {
             return client.query(`DROP TABLE ${name}`);
         }));
     })
