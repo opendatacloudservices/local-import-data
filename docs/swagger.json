@@ -1,0 +1,81 @@
+{
+  "swagger": "2.0",
+  "openapi": "3.0.0",
+  "servers": [
+    {
+      "url": "http://localhost:9999",
+      "description": "Localhost"
+    }
+  ],
+  "info": {
+    "title": "local-import-data",
+    "version": "1.0.0",
+    "description": "Service for standardising harvester data into a unified data source"
+  },
+  "paths": {
+    "/master/reset": {
+      "get": {
+        "operationId": "getMasterReset",
+        "description": "Reset the database structure",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "500": {
+            "description": "error"
+          }
+        }
+      }
+    },
+    "/import/all": {
+      "get": {
+        "operationId": "getImportAll",
+        "description": "initate import on all harvesters",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "success"
+          },
+          "500": {
+            "description": "error"
+          }
+        }
+      }
+    },
+    "/import/{harvester}": {
+      "get": {
+        "operationId": "getImport",
+        "description": "Check for new data to import and then run",
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "harvester",
+            "description": "name of the harvester to check.",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Check initiated"
+          },
+          "500": {
+            "description": "error"
+          }
+        }
+      }
+    }
+  },
+  "components": {},
+  "tags": []
+}
