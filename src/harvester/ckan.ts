@@ -1,6 +1,6 @@
 import {DataSet, Harvester} from './index';
 import {Client} from 'pg';
-import {logError} from 'local-microservice';
+import {logError} from 'local-logger';
 
 interface CkanObject {
   dataset_id: string;
@@ -56,14 +56,13 @@ export class Ckan extends Harvester {
         }
       } catch (err) {
         logError(err);
-        console.log(err);
         throw err;
       }
     }
 
     this.active = false;
 
-    return this.check();
+    return true;
   }
 
   getPrefix(instance: number): Promise<string> {

@@ -40,25 +40,6 @@ test('check if test database is available', async () => {
     expect(result.rows.length).toBeGreaterThan(0);
     expect(typeof result.rows[0].v).toBe('string');
   });
-
-  // reset demo database
-  await client.query(`SELECT 
-      tablename
-    FROM
-      pg_tables
-    WHERE
-      schemaname = 'public';
-  `).then((result) => {
-    return Promise.all(result.rows.map((row) => {
-      return client.query(`DROP TABLE IF EXISTS ${row.tablename} CASCADE;`);
-    }));
-  });
-
-  await client.query(`SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public';`)
-    .then((result) => {
-      expect(result).toHaveProperty('rows');
-      expect(parseInt(result.rows[0].count)).toEqual(0);
-    });
 });
 
 test('masterTableExist:false', async () => {
@@ -68,37 +49,18 @@ test('masterTableExist:false', async () => {
      });
 });
 
-test('initMasterTable', async () => {
-  await initTables(client).then(() => client.query(`SELECT 
-      COUNT(*) AS count
-    FROM
-      pg_tables
-    WHERE
-      schemaname = 'public' AND
-      (tablename = 'datasets' OR tablename = 'taxonomies' OR tablename = 'files');`)
-  )
-  .then((result) => {
-    expect(result).toHaveProperty('rows');
-    expect(parseInt(result.rows[0].count)).toBe(3);
-  });
-});
-
-test('masterTableExist:true', async () => {
-  await tablesExist(client)
-    .then((result) => {
-      expect(result).toBe(true);
-    });
-});
-
 test('masterTableReset', async () => {
   await resetTables(client);
-  await Promise.all(['datasets','files','taxonomies'].map((table) => client.query(`SELECT COUNT(*) AS c FROM ${table}`)))
-    .then((results) => {
-      results.forEach((result) => {
-        expect(result).toHaveProperty('rows');
-        expect(parseInt(result.rows[0].c)).toBe(0);
-      });
-    });
+  await Promise.all(
+    ['datasets', 'files', 'taxonomies'].map(table =>
+      client.query(`SELECT COUNT(*) AS c FROM ${table}`).then(results => {
+        results.forEach(result => {
+          expect(result).toHaveProperty('rows');
+          expect(parseInt(result.rows[0].c)).toBe(0);
+        });
+      })
+    )
+  );
 });
 
 /*---------- HARVESTER TESTS ----------*/
@@ -126,26 +88,6 @@ test('CKAN: check if test database is available', async () => {
     expect(typeof result.rows[0].v).toBe('string');
   });
 
-  // reset demo database
-  await ckanClient.query(`SELECT 
-      tablename
-    FROM
-      pg_tables
-    WHERE
-      schemaname = 'public';
-  `).then((result) => {
-    return Promise.all(result.rows.map((row) => {
-      return ckanClient.query(`DROP TABLE IF EXISTS ${row.tablename} CASCADE;`);
-    }));
-  });
-
-  await ckanMasterTableExist(ckanClient)
-    .then((result) => {
-      if (!result) {
-        return ckanInitMasterTable(ckanClient);
-      }
-    });
-
   await ckanMasterTableExist(ckanClient)
     .then((result) => {
       expect(result).toBe(true);
@@ -157,11 +99,6 @@ test('CKAN: check if test database is available', async () => {
         return ckanInitTables(ckanClient, 'govdata', 'ckan.govdata.de/api/3', 3, null);
       }
       return Promise.resolve();
-    });
-
-  await ckanTablesExist(ckanClient, 'govdata', ckanDefinition_tables)
-    .then((result) => {
-      expect(result).toBe(true);
     });
 
   // add some demo data

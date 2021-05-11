@@ -3,19 +3,14 @@ import * as path from 'path';
 import {Client} from 'pg';
 import {Ckan} from './harvester/ckan';
 import {Harvester} from './harvester/index';
-import {initTables, resetTables, dropTables} from './postgres/index';
+import {resetTables} from './postgres/index';
 import fetch from 'node-fetch';
 
 // get environmental variables
 dotenv.config({path: path.join(__dirname, '../.env')});
 
-import {
-  api,
-  catchAll,
-  startTransaction,
-  logError,
-  port,
-} from 'local-microservice';
+import {api, catchAll, port, simpleResponse} from 'local-microservice';
+import {startTransaction, logError, addToken, localTokens} from 'local-logger';
 
 // connect to postgres (via env vars params)
 const client = new Client({
@@ -34,37 +29,6 @@ harvesters.ckan = new Ckan(client);
 /**
  * @swagger
  *
- * /master/init:
- *   get:
- *     operationId: getMasterInit
- *     description: Create the database structure
- *     produces:
- *       - application/json
- *     responses:
- *       500:
- *         description: error
- *       200:
- *         description: success
- */
-api.get('/master/init', (req, res) => {
-  const trans = startTransaction({name: '/master/init', type: 'get'});
-  initTables(client)
-    .then(() => {
-      res.status(200).json({
-        message: 'Tables created',
-      });
-      trans.end('success');
-    })
-    .catch(err => {
-      logError(err);
-      trans.end('error');
-      res.status(500).json({message: err});
-    });
-});
-
-/**
- * @swagger
- *
  * /master/reset:
  *   get:
  *     operationId: getMasterReset
@@ -78,49 +42,13 @@ api.get('/master/init', (req, res) => {
  *         description: success
  */
 api.get('/master/reset', (req, res) => {
-  const trans = startTransaction({name: '/master/reset', type: 'get'});
   resetTables(client)
     .then(() => {
-      res.status(200).json({
-        message: 'Tables reset',
-      });
-      trans.end('success');
+      return res.status(200).json({message: 'Tables reset'});
     })
     .catch(err => {
       logError(err);
-      trans.end('error');
-      res.status(500).json({message: err});
-    });
-});
-
-/**
- * @swagger
- *
- * /master/drop:
- *   get:
- *     operationId: getMasterDrop
- *     description: Drop the database structure
- *     produces:
- *       - application/json
- *     responses:
- *       500:
- *         description: error
- *       200:
- *         description: success
- */
-api.get('/master/drop', (req, res) => {
-  const trans = startTransaction({name: '/master/drop', type: 'get'});
-  dropTables(client)
-    .then(() => {
-      res.status(200).json({
-        message: 'Tables dropped',
-      });
-      trans.end('success');
-    })
-    .catch(err => {
-      logError(err);
-      trans.end('error');
-      res.status(500).json({message: err});
+      return res.status(500).json({message: err});
     });
 });
 
@@ -139,22 +67,30 @@ api.get('/master/drop', (req, res) => {
  *       200:
  *         description: success
  */
-api.get('/import/all', async (req, res) => {
-  const trans = startTransaction({name: '/import/all', type: 'get'});
+api.get('/import/all', (req, res) => {
+  const trans = startTransaction({
+    name: '/import/all',
+    type: 'get',
+    ...localTokens(res),
+  });
+  new Promise((resolve, reject) => {
+    Promise.all(
+      Object.keys(harvesters).map(key => {
+        return fetch(addToken(`http://localhost:${port}/import/${key}`, res));
+      })
+    )
+      .then(() => {
+        trans(true, {message: '/import/all completed'});
+        resolve(true);
+      })
+      .catch(err => {
+        trans(false, {message: err});
+        logError(err);
+        reject(err);
+      });
+  });
 
-  try {
-    for (const key in harvesters) {
-      await fetch(`http://localhost:${port}/import/${key}`);
-    }
-    res.status(200).json({
-      message: 'Import of all harvesters finished',
-    });
-    trans.end('success');
-  } catch (err) {
-    logError(err);
-    trans.end('error');
-    res.status(500).json({message: err});
-  }
+  res.status(200).json({message: 'Import of all harvesters initiated'});
 });
 
 /**
@@ -180,29 +116,28 @@ api.get('/import/all', async (req, res) => {
  *         description: Check initiated
  */
 api.get('/import/:harvester', (req, res) => {
-  const trans = startTransaction({name: '/import', type: 'get'});
+  const trans = startTransaction({
+    ...localTokens(res),
+    name: '/import/:harvester',
+    type: 'get',
+    subtype: req.params.harvester,
+  });
 
   if (!(req.params.harvester in harvesters)) {
     logError(`harvester not found: ${req.params.harvester}`);
-    res.status(404).json({message: 'harvester type does not exist'});
+    simpleResponse(404, 'harvester type does not exist', res, trans);
   } else {
     harvesters[req.params.harvester]
-      .check()
+      .check(trans)
       .then(result => {
         if (!result) {
-          res.status(200).json({message: 'Nothing to import.'});
+          res.status(200).json({message: 'Nothing to import'});
         } else {
-          res.status(200).json({
-            message:
-              'Data imported or import already in progress (at the end of the import system will automatically check for new imports).',
-          });
+          res.status(200).json({message: 'Initiating import'});
         }
-        trans.end('success');
       })
       .catch(err => {
-        console.log(err);
         logError(err);
-        trans.end('error');
         res.status(500).json({message: err});
       });
   }

@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Ckan = void 0;
 const index_1 = require("./index");
-const local_microservice_1 = require("local-microservice");
+const local_logger_1 = require("local-logger");
 class Ckan extends index_1.Harvester {
     constructor(globalClient) {
         super('ckan', globalClient);
@@ -24,13 +24,12 @@ class Ckan extends index_1.Harvester {
                 }
             }
             catch (err) {
-                local_microservice_1.logError(err);
-                console.log(err);
+                local_logger_1.logError(err);
                 throw err;
             }
         }
         this.active = false;
-        return this.check();
+        return true;
     }
     getPrefix(instance) {
         return this.client
@@ -131,7 +130,7 @@ class Ckan extends index_1.Harvester {
             return this.client
                 .query(`UPDATE ${prefix}_packages SET ckan_status = $1 WHERE id = $2`, ['imported', dataset])
                 .catch(err => {
-                local_microservice_1.logError(err);
+                local_logger_1.logError(err);
                 console.log(err);
             });
         })

@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { Transaction } from 'local-logger';
 export declare type DataSet = {
     harvester: string;
     harvester_instance_id: number | string;
@@ -24,7 +25,7 @@ export declare class Harvester {
     globalClient: Client;
     active: boolean;
     constructor(harvesterName: string, _globalClient: Client);
-    check(): Promise<boolean>;
+    check(trans: Transaction): Promise<boolean>;
     getNext(): Promise<{}[]>;
     import(next: {}[]): Promise<boolean>;
     exists(harvester: string, harvester_instance_id: string | number, harvester_dataset_id: string | number): Promise<number | null>;

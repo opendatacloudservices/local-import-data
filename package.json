@@ -23,22 +23,24 @@
   },
   "devDependencies": {
     "@types/node": "^14.11.8",
+    "@types/node-fetch": "^2.5.7",
+    "@types/pg": "^7.14.11",
     "eslint": "^6.8.0",
     "gts": "^3.0.0",
     "jest": "^26.5.2",
-    "ts-node": "^9.0.0",
-    "@types/node-fetch": "^2.5.7",
     "local-ckan-harvester": "file:../local-ckan-harvester",
-    "@types/pg": "^7.14.4",
+    "ts-node": "^9.0.0",
     "typescript": "^4.0.3"
   },
   "dependencies": {
     "dotenv": "^8.2.0",
     "express-queue": "0.0.12",
+    "local-logger": "file:../local-logger",
     "local-microservice": "file:../local-microservice",
     "local-pm2-config": "file:../local-pm2-config",
-    "utilities-node": "file:../utilities-node",
     "node-fetch": "^2.6.1",
-    "pg": "^8.3.2"
+    "pg": "^8.6.0",
+    "utilities-node": "file:../utilities-node",
+    "utilities-postgres": "file:../utilities-postgres"
   }
 }
