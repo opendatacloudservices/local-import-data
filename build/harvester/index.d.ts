@@ -30,6 +30,6 @@ export declare class Harvester {
     import(next: {}[]): Promise<boolean>;
     exists(harvester: string, harvester_instance_id: string | number, harvester_dataset_id: string | number): Promise<number | null>;
     insertDataset(datasetObj: DataSet): Promise<number>;
-    insertDatasetAttributes(datasetObj: DataSet, datasetId: number, state: string): Promise<void>;
-    updateDataset(datasetObj: DataSet, id: number): Promise<void>;
+    insertDatasetAttributes(datasetObj: DataSet, datasetId: number): Promise<void>;
+    updateDataset(datasetObj: DataSet, id: number): Promise<number>;
 }

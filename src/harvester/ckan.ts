@@ -149,7 +149,7 @@ export class Ckan extends Harvester {
         };
 
         return this.insertDataset(_dataset).then(id => {
-          return this.insertDatasetAttributes(_dataset, id, 'new');
+          return this.insertDatasetAttributes(_dataset, id);
         });
       })
       .then(() => {
@@ -169,7 +169,9 @@ export class Ckan extends Harvester {
           },
         };
 
-        return this.updateDataset(_dataset, id);
+        return this.updateDataset(_dataset, id).then(id => {
+          return this.insertDatasetAttributes(_dataset, id);
+        });
       })
       .then(() => {
         this.setImported(instance, dataset);
@@ -186,7 +188,6 @@ export class Ckan extends Harvester {
           )
           .catch(err => {
             logError(err);
-            console.log(err);
           });
       })
       .then(() => {

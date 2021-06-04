@@ -3,7 +3,7 @@ import * as path from 'path';
 import {Client} from 'pg';
 import {Ckan} from './harvester/ckan';
 import {Harvester} from './harvester/index';
-import {resetTables} from './postgres/index';
+import {resetTables, duplicateByUrl} from './postgres/index';
 import fetch from 'node-fetch';
 
 // get environmental variables
@@ -45,6 +45,32 @@ api.get('/master/reset', (req, res) => {
   resetTables(client)
     .then(() => {
       return res.status(200).json({message: 'Tables reset'});
+    })
+    .catch(err => {
+      logError(err);
+      return res.status(500).json({message: err});
+    });
+});
+
+/**
+ * @swagger
+ *
+ * /master/duplicates:
+ *   get:
+ *     operationId: getMasterDuplicates
+ *     description: Identify duplicates in database
+ *     produces:
+ *       - application/json
+ *     responses:
+ *       500:
+ *         description: error
+ *       200:
+ *         description: success
+ */
+api.get('/master/duplicates', (req, res) => {
+  duplicateByUrl(client)
+    .then(() => {
+      return res.status(200).json({message: 'Duplicates identified'});
     })
     .catch(err => {
       logError(err);
@@ -126,6 +152,13 @@ api.get('/import/:harvester', (req, res) => {
   if (!(req.params.harvester in harvesters)) {
     logError(`harvester not found: ${req.params.harvester}`);
     simpleResponse(404, 'harvester type does not exist', res, trans);
+  } else if (harvesters[req.params.harvester].active) {
+    simpleResponse(
+      200,
+      'import on this harvester already in progress',
+      res,
+      trans
+    );
   } else {
     harvesters[req.params.harvester]
       .check(trans)

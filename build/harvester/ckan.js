@@ -100,7 +100,7 @@ class Ckan extends index_1.Harvester {
                 },
             };
             return this.insertDataset(_dataset).then(id => {
-                return this.insertDatasetAttributes(_dataset, id, 'new');
+                return this.insertDatasetAttributes(_dataset, id);
             });
         })
             .then(() => {
@@ -118,7 +118,9 @@ class Ckan extends index_1.Harvester {
                     harvester_dataset_id: dataset,
                 },
             };
-            return this.updateDataset(_dataset, id);
+            return this.updateDataset(_dataset, id).then(id => {
+                return this.insertDatasetAttributes(_dataset, id);
+            });
         })
             .then(() => {
             this.setImported(instance, dataset);
@@ -131,7 +133,6 @@ class Ckan extends index_1.Harvester {
                 .query(`UPDATE ${prefix}_packages SET ckan_status = $1 WHERE id = $2`, ['imported', dataset])
                 .catch(err => {
                 local_logger_1.logError(err);
-                console.log(err);
             });
         })
             .then(() => {

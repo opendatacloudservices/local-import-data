@@ -4,6 +4,7 @@ exports.Harvester = void 0;
 const pg_1 = require("pg");
 const local_logger_1 = require("local-logger");
 const utilities_node_1 = require("utilities-node");
+const format_1 = require("../format");
 class Harvester {
     constructor(harvesterName, _globalClient) {
         this.harvesterName = '';
@@ -58,7 +59,7 @@ class Harvester {
     // check if a dataset already exists
     exists(harvester, harvester_instance_id, harvester_dataset_id) {
         return this.globalClient
-            .query('SELECT id FROM "Datasets" WHERE harvester = $1 AND harvester_instance_id = $2 AND harvester_dataset_id = $3', [harvester, harvester_instance_id, harvester_dataset_id])
+            .query('SELECT id FROM "Imports" WHERE harvester = $1 AND harvester_instance_id = $2 AND harvester_dataset_id = $3', [harvester, harvester_instance_id, harvester_dataset_id])
             .then(result => {
             if (result.rows.length > 0) {
                 return Promise.resolve(result.rows[0].id);
@@ -71,7 +72,12 @@ class Harvester {
     // insert dataset into central database
     insertDataset(datasetObj) {
         return this.globalClient
-            .query('INSERT INTO "Datasets" (harvester, harvester_instance_id, harvester_dataset_id, meta_name, meta_license, meta_owner, meta_created, meta_modified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id', [
+            .query(`INSERT INTO
+          "Imports"
+          (harvester, harvester_instance_id, harvester_dataset_id, meta_name, meta_license, meta_owner, meta_created, meta_modified)
+        VALUES
+          (${utilities_node_1.dollarList(0, 8)})
+        RETURNING id`, [
             datasetObj.harvester,
             datasetObj.harvester_instance_id,
             datasetObj.harvester_dataset_id,
@@ -85,7 +91,7 @@ class Harvester {
             return Promise.resolve(result.rows[0].id);
         });
     }
-    async insertDatasetAttributes(datasetObj, datasetId, state) {
+    async insertDatasetAttributes(datasetObj, datasetId) {
         if (datasetObj.tags && datasetObj.tags.length > 0) {
             const values = [];
             datasetObj.tags.forEach(tag => {
@@ -98,7 +104,6 @@ class Harvester {
             }
             catch (err) {
                 local_logger_1.logError(err);
-                console.log(err);
                 throw err;
             }
         }
@@ -114,56 +119,99 @@ class Harvester {
             }
             catch (err) {
                 local_logger_1.logError(err);
-                console.log(err);
                 throw err;
             }
         }
         if (datasetObj.resources && datasetObj.resources.length > 0) {
-            const values = [];
-            datasetObj.resources.forEach(resource => {
-                values.push(...[
-                    datasetId,
-                    resource.url,
-                    state,
-                    resource.name,
-                    resource.format,
-                    resource.size,
-                    resource.license,
-                ]);
-            });
             try {
-                await this.globalClient.query(`INSERT INTO "Files" (dataset_id, meta_url, state, meta_name, meta_format, meta_size, meta_license) VALUES ${datasetObj.resources
-                    .map((d, i) => `(${utilities_node_1.dollarList(i * 7, 7)})`)
-                    .join(',')}`, values);
+                for (let r = 0; r < datasetObj.resources.length; r += 1) {
+                    const values = [
+                        datasetId,
+                        datasetObj.resources[r].url,
+                        datasetObj.resources[r].name,
+                        datasetObj.resources[r].format,
+                        datasetObj.resources[r].size,
+                        datasetObj.resources[r].license,
+                        format_1.mimeType(datasetObj.resources[r].url),
+                        format_1.standardizeFormat(datasetObj.resources[r].format),
+                    ];
+                    const duplicates = await this.globalClient.query('SELECT id FROM "Files" WHERE duplicate = FALSE AND meta_url = $1', [datasetObj.resources[r].url]);
+                    if (duplicates.rows.length > 0) {
+                        values.push(true);
+                        values.push(duplicates.rows[0].id);
+                    }
+                    await this.globalClient.query(`INSERT INTO
+              "Files"
+              (dataset_id, meta_url, meta_name, meta_format, meta_size, meta_license, mimetype, format${values.length === 10 ? ', duplicate, duplicate_id' : ''})
+            VALUES
+              (${utilities_node_1.dollarList(0, values.length)})
+            RETURNING id`, values);
+                    // As we harvest datasets from various places and meta data is not identical, the URLs are the only way of identifying duplicates.
+                    // Therefore, in the Downloads table, the urls serve as unique identifiers, to make sure we don't download and process the same file twice.
+                    // Determine if there is a pending download
+                    // Some urls have weird html inside:
+                    let cleanUrl = datasetObj.resources[r].url;
+                    // some urls are so messed up they cannot be decoded
+                    try {
+                        cleanUrl = decodeURI(datasetObj.resources[r].url)
+                            .replace(/(<([^>]+)>)/gi, '')
+                            .trim()
+                            .replace(/http(s)*:\/\/(\s)+/, '');
+                    }
+                    catch (err) {
+                        console.log(err);
+                    }
+                    const pendingDownloads = await this.globalClient.query('SELECT id FROM "Downloads" WHERE url = $1 AND state = \'new\'', [cleanUrl]);
+                    if (pendingDownloads.rows.length === 0) {
+                        // Determine if this should create a download
+                        const duplicateDownloads = await this.globalClient.query('SELECT id, downloaded FROM "Downloads" WHERE url = $1 ORDER BY downloaded DESC LIMIT 1', [cleanUrl]);
+                        if (duplicateDownloads.rows.length > 0) {
+                            const diff = new Date(duplicateDownloads.rows[0]['downloaded']).getTime() -
+                                new Date(datasetObj.modified).getTime();
+                            // If the meta data was modified after the latest download, a new download should be triggered
+                            if (diff < 0) {
+                                await this.globalClient.query('INSERT INTO "Downloads" (url, state, previous, format, mimetype) VALUES ($1, \'new\', $2, $3, $4)', [
+                                    cleanUrl,
+                                    duplicateDownloads.rows[0].id,
+                                    datasetObj.resources[r].format,
+                                    format_1.mimeType(cleanUrl),
+                                ]);
+                            }
+                        }
+                        else {
+                            await this.globalClient.query('INSERT INTO "Downloads" (url, state, format, mimetype) VALUES ($1, \'new\', $2, $3)', [cleanUrl, datasetObj.resources[r].format, format_1.mimeType(cleanUrl)]);
+                        }
+                    }
+                }
             }
             catch (err) {
                 local_logger_1.logError(err);
-                console.log(err);
                 throw err;
             }
         }
         return Promise.resolve();
     }
-    async updateDataset(datasetObj, id) {
-        // we don't care about changes, only current state
-        try {
-            await this.globalClient.query('UPDATE "Datasets" SET meta_name = $1, meta_license = $2, meta_owner = $3, meta_created = $4, meta_modified = $5 WHERE id = $6', [
-                datasetObj.name,
-                datasetObj.license,
-                datasetObj.owner,
-                datasetObj.created,
-                datasetObj.modified,
-                id,
-            ]);
-            await this.globalClient.query('DELETE FROM "Taxonomies" WHERE dataset_id = $1', [id]);
-            await this.globalClient.query('DELETE FROM "Files" WHERE dataset_id = $1', [id]);
-        }
-        catch (err) {
-            local_logger_1.logError(err);
-            console.log(err);
-            throw err;
-        }
-        return this.insertDatasetAttributes(datasetObj, id, 'updated');
+    updateDataset(datasetObj, id) {
+        return this.globalClient
+            .query(`INSERT INTO
+          "Imports"
+          (harvester, harvester_instance_id, harvester_dataset_id, meta_name, meta_license, meta_owner, meta_created, meta_modified, previous_dataset_id)
+        VALUES
+          (${utilities_node_1.dollarList(0, 9)})
+        RETURNING id`, [
+            datasetObj.harvester,
+            datasetObj.harvester_instance_id,
+            datasetObj.harvester_dataset_id,
+            datasetObj.name,
+            datasetObj.license,
+            datasetObj.owner,
+            datasetObj.created,
+            datasetObj.modified,
+            id,
+        ])
+            .then(result => {
+            return Promise.resolve(result.rows[0].id);
+        });
     }
 }
 exports.Harvester = Harvester;

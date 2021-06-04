@@ -50,6 +50,31 @@ local_microservice_1.api.get('/master/reset', (req, res) => {
 /**
  * @swagger
  *
+ * /master/duplicates:
+ *   get:
+ *     operationId: getMasterDuplicates
+ *     description: Identify duplicates in database
+ *     produces:
+ *       - application/json
+ *     responses:
+ *       500:
+ *         description: error
+ *       200:
+ *         description: success
+ */
+local_microservice_1.api.get('/master/duplicates', (req, res) => {
+    index_1.duplicateByUrl(client)
+        .then(() => {
+        return res.status(200).json({ message: 'Duplicates identified' });
+    })
+        .catch(err => {
+        local_logger_1.logError(err);
+        return res.status(500).json({ message: err });
+    });
+});
+/**
+ * @swagger
+ *
  * /import/all:
  *   get:
  *     operationId: getImportAll
@@ -117,6 +142,9 @@ local_microservice_1.api.get('/import/:harvester', (req, res) => {
         local_logger_1.logError(`harvester not found: ${req.params.harvester}`);
         local_microservice_1.simpleResponse(404, 'harvester type does not exist', res, trans);
     }
+    else if (harvesters[req.params.harvester].active) {
+        local_microservice_1.simpleResponse(200, 'import on this harvester already in progress', res, trans);
+    }
     else {
         harvesters[req.params.harvester]
             .check(trans)
@@ -133,6 +161,28 @@ local_microservice_1.api.get('/import/:harvester', (req, res) => {
             res.status(500).json({ message: err });
         });
     }
+});
+local_microservice_1.api.get('/fix/url', async (req, res) => {
+    const files = await client.query('SELECT id, meta_url FROM "Files" WHERE meta_url = url');
+    for (let f = 0; f < files.rowCount; f += 1) {
+        let cleanUrl = files.rows[f].meta_url;
+        try {
+            cleanUrl = decodeURI(files.rows[f].meta_url)
+                .replace(/(<([^>]+)>)/gi, '')
+                .trim()
+                .replace(/http(s)*:\/\/(\s)+/, '');
+        }
+        catch (err) {
+            console.log(err);
+        }
+        if (cleanUrl !== files.rows[f].meta_url) {
+            await client.query('UPDATE "Files" SET url = $1 WHERE id = $2', [
+                cleanUrl,
+                files.rows[f].id,
+            ]);
+        }
+    }
+    res.status(200).json({ message: 'YAY' });
 });
 local_microservice_1.catchAll();
 //# sourceMappingURL=index.js.map
