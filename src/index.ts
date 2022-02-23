@@ -2,15 +2,30 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import {Client} from 'pg';
 import {Ckan} from './harvester/ckan';
+import {CSW} from './harvester/csw';
 import {Harvester} from './harvester/index';
-import {resetTables, duplicateByUrl} from './postgres/index';
+import {
+  resetTables,
+  duplicateByUrl,
+  metaFromDownloadedFile,
+} from './postgres/index';
 import fetch from 'node-fetch';
 
 // get environmental variables
 dotenv.config({path: path.join(__dirname, '../.env')});
 
-import {api, catchAll, port, simpleResponse} from 'local-microservice';
-import {startTransaction, logError, addToken, localTokens} from 'local-logger';
+import {
+  api,
+  catchAll,
+  port,
+  simpleResponse,
+} from '@opendatacloudservices/local-microservice';
+import {
+  startTransaction,
+  logError,
+  addToken,
+  localTokens,
+} from '@opendatacloudservices/local-logger';
 
 // connect to postgres (via env vars params)
 const client = new Client({
@@ -25,6 +40,7 @@ client.connect();
 // harvester setup
 const harvesters: {[key: string]: Harvester} = {};
 harvesters.ckan = new Ckan(client);
+harvesters.csw = new CSW(client);
 
 /**
  * @swagger
@@ -47,7 +63,7 @@ api.get('/master/reset', (req, res) => {
       return res.status(200).json({message: 'Tables reset'});
     })
     .catch(err => {
-      logError(err);
+      logError({message: err});
       return res.status(500).json({message: err});
     });
 });
@@ -173,6 +189,38 @@ api.get('/import/:harvester', (req, res) => {
         logError(err);
         res.status(500).json({message: err});
       });
+  }
+});
+
+/**
+ * @swagger
+ *
+ * /meta/download/:id:
+ *   get:
+ *     operationId: getMetDownload
+ *     description: initate import on all harvesters
+ *     produces:
+ *       - application/json
+ *     responses:
+ *       500:
+ *         description: error
+ *       200:
+ *         description: success
+ */
+api.get('/meta/download/:id', (req, res) => {
+  const trans = startTransaction({
+    name: '/meta/download/:id',
+    type: 'get',
+    ...localTokens(res),
+  });
+  if (!('id' in req.params)) {
+    logError('id missing');
+    simpleResponse(404, 'id missing', res, trans);
+  } else {
+    metaFromDownloadedFile(client, parseInt(req.params.id)).then(results => {
+      trans(true, {message: '/meta/download/:id - success'});
+      res.status(200).json({message: 'Download Meta', data: results});
+    });
   }
 });
 

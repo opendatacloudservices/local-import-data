@@ -1,15 +1,17 @@
 import type {Client} from 'pg';
-import {tablesExist} from 'utilities-postgres';
+import {tablesExist} from '@opendatacloudservices/utilities-postgres';
 
 export const resetTables = (client: Client): Promise<void> => {
-  return tablesExist(client, ['Datasets', 'Files', 'Taxonomies'])
+  return tablesExist(client, ['Imports', 'Files', 'Taxonomies', 'Contacts'])
     .then(exists => {
       if (!exists) {
         return Promise.reject(
           'Looks like some of the tables you are trying to reset, do not exist.'
         );
       }
-      return client.query('TRUNCATE "Files", "Taxonomies", "Datasets";');
+      return client.query(
+        'TRUNCATE "Files", "Taxonomies", "Contacts", "Imports" CASCADE;'
+      );
     })
     .then(() => {
       return Promise.resolve();
@@ -62,4 +64,21 @@ export const duplicateByUrl = (client: Client): Promise<void> => {
           "Files".id = duplicates.id`
     )
     .then(() => {});
+};
+
+export const metaFromDownloadedFile = (
+  client: Client,
+  id: number
+): Promise<{[index: string]: string | number | null}[]> => {
+  return client
+    .query(
+      `
+      SELECT * FROM "DownloadedFiles"
+      JOIN "Downloads" ON "Downloads".id = "DownloadedFiles".download_id
+      JOIN "Files" ON "Files".url = "Downloads".url
+      JOIN "Imports" ON "Files".dataset_id = "Imports".id
+      WHERE "DownloadedFiles".id = $1`,
+      [id]
+    )
+    .then(result => result.rows);
 };

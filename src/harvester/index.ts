@@ -1,25 +1,48 @@
 import {Client} from 'pg';
-import {logError, Transaction} from 'local-logger';
-import {dollarList} from 'utilities-node';
+import {logError, Transaction} from '@opendatacloudservices/local-logger';
+import {dollarList} from '@opendatacloudservices/utilities-node';
 import {standardizeFormat, mimeType} from '../format';
+import * as moment from 'moment';
+
+export type DataSetResource = {
+  url: string;
+  name: string | null;
+  format: string | null;
+  size?: number | null;
+  license?: string | null;
+  description: string | null;
+  function: string | null;
+  protocol: string | null;
+};
 
 export type DataSet = {
   harvester: string;
   harvester_instance_id: number | string;
   harvester_dataset_id: number | string;
-  name: string;
-  license: string;
-  owner: string[];
+  name: string | null;
+  license: string[] | null;
+  owner: string[] | null;
   created: string;
   modified: string;
-  tags?: string[];
-  groups?: string[];
-  resources?: {
-    url: string;
-    name: string;
-    format: string;
-    size: number;
-    license: string;
+  temporalStart: string | null;
+  temporalEnd: string | null;
+  spatial: number[] | null;
+  spatialDescription?: string[] | null;
+  groups: {
+    value: string | null;
+    type?: string | null;
+    class: string;
+  }[];
+  description?: string | null;
+  resources: DataSetResource[];
+  contacts: {
+    name: string | null;
+    individual?: string | null;
+    region?: string | null;
+    contact?: {
+      [key: string]: string | null;
+    };
+    type?: string | null;
   }[];
 };
 
@@ -60,6 +83,7 @@ export class Harvester {
               // TODO: run check again, in case something was modified in the meantime
             })
             .catch(err => {
+              console.log(err);
               trans(false, {message: err});
             });
           return true;
@@ -105,24 +129,60 @@ export class Harvester {
 
   // insert dataset into central database
   insertDataset(datasetObj: DataSet): Promise<number> {
+    let values = [
+      datasetObj.harvester,
+      datasetObj.harvester_instance_id,
+      datasetObj.harvester_dataset_id,
+      datasetObj.name,
+      datasetObj.license,
+      datasetObj.owner,
+      moment(datasetObj.created).isValid()
+        ? moment(datasetObj.created).format('YYYY-MM-DD HH:mm:ss')
+        : null,
+      moment(datasetObj.modified).isValid()
+        ? moment(datasetObj.modified).format('YYYY-MM-DD HH:mm:ss')
+        : null,
+      datasetObj.description,
+      moment(datasetObj.temporalStart).isValid()
+        ? moment(datasetObj.temporalStart).format('YYYY-MM-DD HH:mm:ss')
+        : null,
+      moment(datasetObj.temporalEnd).isValid()
+        ? moment(datasetObj.temporalEnd).format('YYYY-MM-DD HH:mm:ss')
+        : null,
+      datasetObj.spatialDescription,
+    ];
+    if (datasetObj.spatial && datasetObj.spatial.length === 4) {
+      values = [...values, ...datasetObj.spatial];
+    } else {
+      values.push(null);
+    }
     return this.globalClient
       .query(
         `INSERT INTO
           "Imports"
-          (harvester, harvester_instance_id, harvester_dataset_id, meta_name, meta_license, meta_owner, meta_created, meta_modified)
+          (
+            harvester,
+            harvester_instance_id,
+            harvester_dataset_id,
+            meta_name,
+            meta_license,
+            meta_owner,
+            meta_created,
+            meta_modified,
+            meta_abstract,
+            temporal_start,
+            temporal_end,
+            spatial_description,
+            bbox
+          )
         VALUES
-          (${dollarList(0, 8)})
+          (${dollarList(0, 12)}${
+          datasetObj.spatial && datasetObj.spatial.length === 4
+            ? ', ST_MakeEnvelope($13, $14, $15, $16, 4326)'
+            : ', $13'
+        })
         RETURNING id`,
-        [
-          datasetObj.harvester,
-          datasetObj.harvester_instance_id,
-          datasetObj.harvester_dataset_id,
-          datasetObj.name,
-          datasetObj.license,
-          datasetObj.owner,
-          datasetObj.created,
-          datasetObj.modified,
-        ]
+        values
       )
       .then(result => {
         return Promise.resolve(result.rows[0].id);
@@ -133,52 +193,154 @@ export class Harvester {
     datasetObj: DataSet,
     datasetId: number
   ): Promise<void> {
-    if (datasetObj.tags && datasetObj.tags.length > 0) {
-      const values: (string | number)[] = [];
-      datasetObj.tags.forEach(tag => {
-        values.push(...[datasetId, 'tag', tag]);
-      });
-      try {
-        await this.globalClient.query(
-          `INSERT INTO "Taxonomies" (dataset_id, type, value) VALUES ${datasetObj.tags
-            .map((d, i) => `(${dollarList(i * 3, 3)})`)
-            .join(',')}`,
-          values
-        );
-      } catch (err) {
-        logError(err);
-        throw err;
-      }
-    }
+    // PROCESS GROUPS/CATEGORIES :----------
     if (datasetObj.groups && datasetObj.groups.length > 0) {
-      const values: (string | number)[] = [];
+      const values: (string | number | null)[] = [];
       datasetObj.groups.forEach(group => {
-        values.push(...[datasetId, 'category', group]);
+        let duplicate = false;
+        for (let i = 0; i < values.length; i += 2) {
+          if (
+            values[i] ===
+              (group.value ? group.value.toLowerCase().trim() : '') &&
+            values[i + 1] ===
+              (group.type ? group.type.toLowerCase().trim() : '')
+          ) {
+            duplicate = true;
+          }
+        }
+        if (!duplicate) {
+          values.push(
+            ...[
+              group.value ? group.value.toLowerCase().trim() : '',
+              group.type ? group.type.toLowerCase().trim() : '',
+            ]
+          );
+        }
       });
       try {
-        await this.globalClient.query(
-          `INSERT INTO "Taxonomies" (dataset_id, type, value) VALUES ${datasetObj.groups
-            .map((d, i) => `(${dollarList(i * 3, 3)})`)
-            .join(',')}`,
+        let qs = '';
+        for (let i = 0; i < values.length / 2; i += 1) {
+          if (i > 0) {
+            qs += ',';
+          }
+          qs += `(${dollarList(i * 2, 2)})`;
+        }
+        const taxonomy_ids = await this.globalClient.query(
+          `INSERT INTO "Taxonomies" (value, type) VALUES ${qs}
+          ON CONFLICT (value, type) DO UPDATE SET value = EXCLUDED.value
+          RETURNING id`,
           values
         );
+
+        await this.globalClient.query(
+          `INSERT INTO "_TaxonomiesToImports" (taxonomies_id, imports_id, type) VALUES ${taxonomy_ids.rows
+            .map((_d, i) => `(${dollarList(i * 3, 3)})`)
+            .join(',')}`,
+          taxonomy_ids.rows
+            .map((row, ri) => [row.id, datasetId, datasetObj.groups[ri].class])
+            .reduce((acc, val) => acc.concat(val), [])
+        );
       } catch (err) {
-        logError(err);
+        logError({err});
         throw err;
       }
     }
+    if (datasetObj.contacts && datasetObj.contacts.length > 0) {
+      const values: (string | number | null)[] = [];
+      datasetObj.contacts.forEach(contact => {
+        // check if the value isn't already in the list
+        let duplicate = false;
+        for (let i = 0; i < values.length; i += 4) {
+          if (
+            values[i] ===
+              (contact.name ? contact.name.toLowerCase().trim() : '') &&
+            values[i + 1] ===
+              (contact.individual
+                ? contact.individual.toLowerCase().trim()
+                : '')
+          ) {
+            duplicate = true;
+          }
+        }
+
+        if (!duplicate) {
+          values.push(
+            ...[
+              contact.name ? contact.name.toLowerCase().trim() : '',
+              contact.individual ? contact.individual.toLowerCase().trim() : '',
+              contact.region ? contact.region : null,
+              contact.contact ? JSON.stringify(contact.contact) : null,
+            ]
+          );
+        }
+      });
+      try {
+        let qs = '';
+        for (let i = 0; i < values.length / 4; i += 1) {
+          if (i > 0) {
+            qs += ',';
+          }
+          qs += `(${dollarList(i * 4, 4)})`;
+        }
+        const contacts_ids = await this.globalClient.query(
+          `INSERT INTO "Contacts" (name, individual, region, contact) VALUES ${qs}
+          ON CONFLICT (name, individual) DO UPDATE SET name = EXCLUDED.name
+          RETURNING id`,
+          values
+        );
+
+        await this.globalClient.query(
+          `INSERT INTO "_ContactsToImports" (contacts_id, imports_id, type) VALUES ${contacts_ids.rows
+            .map((_d, i) => `(${dollarList(i * 3, 3)})`)
+            .join(',')}`,
+          contacts_ids.rows
+            .map((row, ri) => [row.id, datasetId, datasetObj.contacts[ri].type])
+            .reduce((acc, val) => acc.concat(val), [])
+        );
+      } catch (err) {
+        logError({err});
+        throw err;
+      }
+    }
+    // PROCESS RESOURCES :----------
     if (datasetObj.resources && datasetObj.resources.length > 0) {
       try {
         for (let r = 0; r < datasetObj.resources.length; r += 1) {
-          const values: (number | string | boolean)[] = [
+          // Some urls have weird html inside:
+          let cleanUrl = datasetObj.resources[r].url;
+          // some urls are so messed up they cannot be decoded
+          try {
+            cleanUrl = decodeURI(datasetObj.resources[r].url)
+              .replace(/(<([^>]+)>)/gi, '')
+              .trim();
+
+            const spaceAfterProtocol = cleanUrl.match(/http(s?):\/\/(\s)+/);
+            if (spaceAfterProtocol) {
+              cleanUrl = cleanUrl.replace(
+                spaceAfterProtocol[0],
+                spaceAfterProtocol[0].trim()
+              );
+            }
+          } catch (err) {
+            logError({message: err});
+          }
+
+          const values: (number | string | boolean | null)[] = [
             datasetId,
             datasetObj.resources[r].url,
+            cleanUrl,
             datasetObj.resources[r].name,
             datasetObj.resources[r].format,
-            datasetObj.resources[r].size,
-            datasetObj.resources[r].license,
+            datasetObj.resources[r].size || null,
+            datasetObj.resources[r].license || null,
             mimeType(datasetObj.resources[r].url),
-            standardizeFormat(datasetObj.resources[r].format),
+            standardizeFormat(
+              datasetObj.resources[r].format || 'unknown',
+              datasetObj.resources[r].url
+            ),
+            datasetObj.resources[r].description,
+            datasetObj.resources[r].function,
+            datasetObj.resources[r].protocol, // TODO merge with format?
           ];
           const duplicates = await this.globalClient.query(
             'SELECT id FROM "Files" WHERE duplicate = FALSE AND meta_url = $1',
@@ -191,9 +353,22 @@ export class Harvester {
           await this.globalClient.query(
             `INSERT INTO
               "Files"
-              (dataset_id, meta_url, meta_name, meta_format, meta_size, meta_license, mimetype, format${
-                values.length === 10 ? ', duplicate, duplicate_id' : ''
-              })
+              (
+                dataset_id,
+                meta_url,
+                url,
+                meta_name,
+                meta_format,
+                meta_size,
+                meta_license,
+                mimetype,
+                format,
+                meta_description,
+                meta_function,
+                meta_protocol${
+                  values.length === 14 ? ', duplicate, duplicate_id' : ''
+                }
+              )
             VALUES
               (${dollarList(0, values.length)})
             RETURNING id`,
@@ -202,18 +377,6 @@ export class Harvester {
           // As we harvest datasets from various places and meta data is not identical, the URLs are the only way of identifying duplicates.
           // Therefore, in the Downloads table, the urls serve as unique identifiers, to make sure we don't download and process the same file twice.
           // Determine if there is a pending download
-
-          // Some urls have weird html inside:
-          let cleanUrl = datasetObj.resources[r].url;
-          // some urls are so messed up they cannot be decoded
-          try {
-            cleanUrl = decodeURI(datasetObj.resources[r].url)
-              .replace(/(<([^>]+)>)/gi, '')
-              .trim()
-              .replace(/http(s)*:\/\/(\s)+/, '');
-          } catch (err) {
-            console.log(err);
-          }
 
           const pendingDownloads = await this.globalClient.query(
             'SELECT id FROM "Downloads" WHERE url = $1 AND state = \'new\'',
@@ -237,7 +400,10 @@ export class Harvester {
                   [
                     cleanUrl,
                     duplicateDownloads.rows[0].id,
-                    datasetObj.resources[r].format,
+                    standardizeFormat(
+                      datasetObj.resources[r].format || 'unknown',
+                      datasetObj.resources[r].url
+                    ),
                     mimeType(cleanUrl),
                   ]
                 );
@@ -245,13 +411,20 @@ export class Harvester {
             } else {
               await this.globalClient.query(
                 'INSERT INTO "Downloads" (url, state, format, mimetype) VALUES ($1, \'new\', $2, $3)',
-                [cleanUrl, datasetObj.resources[r].format, mimeType(cleanUrl)]
+                [
+                  cleanUrl,
+                  standardizeFormat(
+                    datasetObj.resources[r].format || 'unknown',
+                    datasetObj.resources[r].url
+                  ),
+                  mimeType(cleanUrl),
+                ]
               );
             }
           }
         }
       } catch (err) {
-        logError(err);
+        logError({err});
         throw err;
       }
     }
@@ -259,25 +432,63 @@ export class Harvester {
   }
 
   updateDataset(datasetObj: DataSet, id: number): Promise<number> {
+    let values = [
+      datasetObj.harvester,
+      datasetObj.harvester_instance_id,
+      datasetObj.harvester_dataset_id,
+      datasetObj.name,
+      datasetObj.license,
+      datasetObj.owner,
+      moment(datasetObj.created).isValid()
+        ? moment(datasetObj.created).format('YYYY-MM-DD HH:mm:ss')
+        : null,
+      moment(datasetObj.modified).isValid()
+        ? moment(datasetObj.modified).format('YYYY-MM-DD HH:mm:ss')
+        : null,
+      datasetObj.description,
+      moment(datasetObj.temporalStart).isValid()
+        ? moment(datasetObj.temporalStart).format('YYYY-MM-DD HH:mm:ss')
+        : null,
+      moment(datasetObj.temporalEnd).isValid()
+        ? moment(datasetObj.temporalEnd).format('YYYY-MM-DD HH:mm:ss')
+        : null,
+      datasetObj.spatialDescription,
+    ];
+    if (datasetObj.spatial && datasetObj.spatial.length === 4) {
+      values = [...values, ...datasetObj.spatial];
+    } else {
+      values.push(null);
+    }
+    values.push(id);
+
     return this.globalClient
       .query(
         `INSERT INTO
           "Imports"
-          (harvester, harvester_instance_id, harvester_dataset_id, meta_name, meta_license, meta_owner, meta_created, meta_modified, previous_dataset_id)
+          (
+            harvester,
+            harvester_instance_id,
+            harvester_dataset_id,
+            meta_name,
+            meta_license,
+            meta_owner,
+            meta_created,
+            meta_modified,
+            meta_abstract,
+            temporal_start,
+            temporal_end,
+            spatial_description,
+            bbox,
+            previous_dataset_id
+          )
         VALUES
-          (${dollarList(0, 9)})
+          (${dollarList(0, 12)}${
+          datasetObj.spatial && datasetObj.spatial.length === 4
+            ? ', ST_MakeEnvelope($13, $14, $15, $16, 4326), $17'
+            : ', $13, $14'
+        })
         RETURNING id`,
-        [
-          datasetObj.harvester,
-          datasetObj.harvester_instance_id,
-          datasetObj.harvester_dataset_id,
-          datasetObj.name,
-          datasetObj.license,
-          datasetObj.owner,
-          datasetObj.created,
-          datasetObj.modified,
-          id,
-        ]
+        values
       )
       .then(result => {
         return Promise.resolve(result.rows[0].id);

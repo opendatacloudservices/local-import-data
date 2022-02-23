@@ -1,20 +1,21 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.duplicateByUrl = exports.resetTables = void 0;
-const utilities_postgres_1 = require("utilities-postgres");
-exports.resetTables = (client) => {
-    return utilities_postgres_1.tablesExist(client, ['Datasets', 'Files', 'Taxonomies'])
+exports.metaFromDownloadedFile = exports.duplicateByUrl = exports.resetTables = void 0;
+const utilities_postgres_1 = require("@opendatacloudservices/utilities-postgres");
+const resetTables = (client) => {
+    return (0, utilities_postgres_1.tablesExist)(client, ['Imports', 'Files', 'Taxonomies', 'Contacts'])
         .then(exists => {
         if (!exists) {
             return Promise.reject('Looks like some of the tables you are trying to reset, do not exist.');
         }
-        return client.query('TRUNCATE "Files", "Taxonomies", "Datasets";');
+        return client.query('TRUNCATE "Files", "Taxonomies", "Contacts", "Imports" CASCADE;');
     })
         .then(() => {
         return Promise.resolve();
     });
 };
-exports.duplicateByUrl = (client) => {
+exports.resetTables = resetTables;
+const duplicateByUrl = (client) => {
     return client
         .query(`
       WWITH duplicates AS (
@@ -59,4 +60,16 @@ exports.duplicateByUrl = (client) => {
           "Files".id = duplicates.id`)
         .then(() => { });
 };
+exports.duplicateByUrl = duplicateByUrl;
+const metaFromDownloadedFile = (client, id) => {
+    return client
+        .query(`
+      SELECT * FROM "DownloadedFiles"
+      JOIN "Downloads" ON "Downloads".id = "DownloadedFiles".download_id
+      JOIN "Files" ON "Files".url = "Downloads".url
+      JOIN "Imports" ON "Files".dataset_id = "Imports".id
+      WHERE "DownloadedFiles".id = $1`, [id])
+        .then(result => result.rows);
+};
+exports.metaFromDownloadedFile = metaFromDownloadedFile;
 //# sourceMappingURL=index.js.map
