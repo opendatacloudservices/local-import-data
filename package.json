@@ -1,5 +1,5 @@
 {
-  "name": "local-import-data",
+  "name": "@opendatacloudservices/local-import-data",
   "version": "1.0.0",
   "description": "",
   "files": [
